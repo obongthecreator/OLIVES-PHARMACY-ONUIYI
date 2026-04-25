@@ -18,7 +18,9 @@ if ( ! class_exists( 'Olives_Pharmacy_Plugin' ) ) {
 class Olives_Pharmacy_Plugin {
 const VERSION    = '1.0';
 const DB_VERSION = '1.0';
-const NONCE      = 'olives_nonce';
+		const NONCE      = 'olives_nonce';
+		// Accept small floating-point arithmetic variance (0.5 Naira) when validating split payments.
+		const PAYMENT_TOLERANCE = 0.5;
 
 private static $instance = null;
 
@@ -96,7 +98,7 @@ $sql = array();
 $sql[] = "CREATE TABLE {$products} (
 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 name VARCHAR(191) NOT NULL,
-nafdac_number VARCHAR(50) NULL,
+nafdac_number VARCHAR(20) NULL,
 batch_number VARCHAR(50) NULL,
 expiry_date DATE NULL,
 quantity INT NOT NULL DEFAULT 0,
@@ -237,12 +239,13 @@ return;
 }
 
 $now  = current_time( 'mysql' );
+$tz   = new DateTimeZone( 'Africa/Lagos' );
 $demo = array(
-array( 'Paracetamol 500mg', 'A4-1234', 'B-001', date( 'Y-m-d', strtotime( '+1 year' ) ), 120, 500, 800, 20 ),
-array( 'Amoxicillin 250mg', 'A4-2234', 'B-002', date( 'Y-m-d', strtotime( '+8 months' ) ), 80, 1200, 1800, 15 ),
-array( 'Vitamin C 1000mg', 'A4-3234', 'B-003', date( 'Y-m-d', strtotime( '+10 months' ) ), 95, 2000, 3000, 20 ),
-array( 'ORS Sachets', 'A4-4234', 'B-004', date( 'Y-m-d', strtotime( '+6 months' ) ), 40, 300, 500, 10 ),
-array( 'Antacid Syrup', 'A4-5234', 'B-005', date( 'Y-m-d', strtotime( '+5 months' ) ), 25, 1800, 2500, 8 ),
+array( 'Paracetamol 500mg', 'A4-1234', 'B-001', ( new DateTime( '+1 year', $tz ) )->format( 'Y-m-d' ), 120, 500, 800, 20 ),
+array( 'Amoxicillin 250mg', 'A4-2234', 'B-002', ( new DateTime( '+8 months', $tz ) )->format( 'Y-m-d' ), 80, 1200, 1800, 15 ),
+array( 'Vitamin C 1000mg', 'A4-3234', 'B-003', ( new DateTime( '+10 months', $tz ) )->format( 'Y-m-d' ), 95, 2000, 3000, 20 ),
+array( 'ORS Sachets', 'A4-4234', 'B-004', ( new DateTime( '+6 months', $tz ) )->format( 'Y-m-d' ), 40, 300, 500, 10 ),
+array( 'Antacid Syrup', 'A4-5234', 'B-005', ( new DateTime( '+5 months', $tz ) )->format( 'Y-m-d' ), 25, 1800, 2500, 8 ),
 );
 
 foreach ( $demo as $d ) {
@@ -315,11 +318,12 @@ wp_add_inline_style( 'olives-inline-style', $this->inline_css() );
 
 wp_register_script( 'olives-app', '', array( 'chartjs' ), self::VERSION, true );
 wp_enqueue_script( 'olives-app' );
-wp_localize_script(
-'olives-app',
-'OlivesData',
-array(
-'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+			wp_localize_script(
+				'olives-app',
+				'OlivesData',
+				array(
+					'business'    => $this->receipt_profile(),
+					'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
 'nonce'       => wp_create_nonce( self::NONCE ),
 'userCanRead' => is_user_logged_in() ? current_user_can( 'read' ) : false,
 'i18n'        => array(
@@ -546,10 +550,18 @@ global $wpdb;
 return $wpdb->prefix . 'olives_' . $name;
 }
 
-private function now_wat() {
-$dt = new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) );
-return $dt->format( 'Y-m-d H:i:s' );
-}
+		private function now_wat() {
+			$dt = new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) );
+			return $dt->format( 'Y-m-d H:i:s' );
+		}
+
+		private function receipt_profile() {
+			return array(
+				'name'    => (string) apply_filters( 'olives_pharmacy_name', 'OLIVES PHARMACY' ),
+				'address' => (string) apply_filters( 'olives_pharmacy_address', 'No. 1 Health Street, Uyo' ),
+				'phone'   => (string) apply_filters( 'olives_pharmacy_phone', '+234 800 000 0000' ),
+			);
+		}
 
 private function format_naira( $amount ) {
 return '₦' . number_format( (float) $amount, 0 );
@@ -582,13 +594,19 @@ $reorder_level = isset( $_POST['reorder_level'] ) ? absint( wp_unslash( $_POST['
 if ( '' === $name ) {
 wp_send_json_error( array( 'message' => __( 'Product name is required.', 'olives-pharmacy' ) ), 422 );
 }
+if ( strlen( $nafdac_number ) > 20 ) {
+wp_send_json_error( array( 'message' => __( 'NAFDAC Number cannot exceed 20 characters.', 'olives-pharmacy' ) ), 422 );
+}
+if ( strlen( $batch_number ) > 50 ) {
+wp_send_json_error( array( 'message' => __( 'Batch Number cannot exceed 50 characters.', 'olives-pharmacy' ) ), 422 );
+}
 
 $table = $this->table( 'products' );
 $now   = $this->now_wat();
 $data  = array(
 'name'          => $name,
-'nafdac_number' => substr( $nafdac_number, 0, 50 ),
-'batch_number'  => substr( $batch_number, 0, 50 ),
+'nafdac_number' => $nafdac_number,
+'batch_number'  => $batch_number,
 'expiry_date'   => ! empty( $expiry_date ) ? $expiry_date : null,
 'quantity'      => $quantity,
 'cost_price'    => $cost_price,
@@ -637,7 +655,7 @@ array(
 'quantity_change'  => (int) $change,
 'quantity_after'   => (int) $after,
 'note'             => sanitize_text_field( $note ),
-'staff_id'         => get_current_user_id() ?: null,
+'staff_id'         => ( get_current_user_id() > 0 ) ? get_current_user_id() : null,
 'created_at'       => $this->now_wat(),
 )
 );
@@ -646,7 +664,7 @@ array(
 private function generate_receipt_no() {
 global $wpdb;
 $table = $this->table( 'sales' );
-$date  = gmdate( 'Ymd', time() + ( HOUR_IN_SECONDS ) );
+$date  = ( new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) ) )->format( 'Ymd' );
 for ( $i = 0; $i < 6; $i++ ) {
 $suffix     = wp_rand( 1000, 9999 );
 $receipt_no = 'OP-' . $date . '-' . $suffix;
@@ -707,18 +725,20 @@ $validated_items[]  = array(
 }
 
 $split_sum = $cash_amount + $card_amount + $transfer_amount;
-if ( abs( $split_sum - $total ) > 0.5 ) {
+if ( abs( $split_sum - $total ) > self::PAYMENT_TOLERANCE ) {
 wp_send_json_error( array( 'message' => __( 'Payment split is not balanced.', 'olives-pharmacy' ) ), 422 );
 }
 
 $user       = wp_get_current_user();
-$staff_name = $user && $user->exists() ? ( $user->display_name ?: $user->user_login ) : 'Guest';
+$staff_name = $user && $user->exists() ? ( empty( $user->display_name ) ? $user->user_login : $user->display_name ) : 'Guest';
 $receipt_no = $this->generate_receipt_no();
 $created_at = $this->now_wat();
 
-$wpdb->query( 'START TRANSACTION' );
+// Transactions are best-effort; some DB engines may not support them.
+$tx_result  = $wpdb->query( 'START TRANSACTION' );
+$tx_started = ( false !== $tx_result && empty( $wpdb->last_error ) );
 try {
-$wpdb->insert(
+$insert_sale = $wpdb->insert(
 $sales_table,
 array(
 'receipt_no'       => $receipt_no,
@@ -732,11 +752,14 @@ array(
 'created_at'       => $created_at,
 )
 );
+if ( false === $insert_sale ) {
+throw new RuntimeException( __( 'Failed to create sale.', 'olives-pharmacy' ) . ' ' . $wpdb->last_error );
+}
 $sale_id = (int) $wpdb->insert_id;
 
 foreach ( $validated_items as $item ) {
 $after_qty = (int) $item['product']['quantity'] - (int) $item['quantity'];
-$wpdb->insert(
+$insert_item = $wpdb->insert(
 $sale_items_table,
 array(
 'sale_id'       => $sale_id,
@@ -747,13 +770,26 @@ array(
 'line_total'    => $item['line_total'],
 )
 );
-$wpdb->update( $products_table, array( 'quantity' => $after_qty, 'updated_at' => $created_at ), array( 'id' => (int) $item['product']['id'] ) );
+if ( false === $insert_item ) {
+throw new RuntimeException( __( 'Failed to create sale item.', 'olives-pharmacy' ) . ' ' . $wpdb->last_error );
+}
+$update_stock = $wpdb->update( $products_table, array( 'quantity' => $after_qty, 'updated_at' => $created_at ), array( 'id' => (int) $item['product']['id'] ) );
+if ( false === $update_stock ) {
+throw new RuntimeException( __( 'Failed to update stock.', 'olives-pharmacy' ) . ' ' . $wpdb->last_error );
+}
 $this->log_stock_history( (int) $item['product']['id'], $item['product']['name'], 'sale', - (int) $item['quantity'], $after_qty, 'Sale ' . $receipt_no );
+if ( ! empty( $wpdb->last_error ) ) {
+throw new RuntimeException( __( 'Failed to log stock history.', 'olives-pharmacy' ) . ' ' . $wpdb->last_error );
+}
 }
 
+if ( $tx_started ) {
 $wpdb->query( 'COMMIT' );
+}
 } catch ( Exception $e ) {
+if ( $tx_started ) {
 $wpdb->query( 'ROLLBACK' );
+}
 wp_send_json_error( array( 'message' => __( 'Unable to process sale.', 'olives-pharmacy' ) ), 500 );
 }
 
@@ -821,7 +857,7 @@ $this->assert_can_read();
 global $wpdb;
 $products = $this->table( 'products' );
 $sales    = $this->table( 'sales' );
-$today    = gmdate( 'Y-m-d', time() + HOUR_IN_SECONDS );
+$today    = ( new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) ) )->format( 'Y-m-d' );
 
 $total_products = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$products}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 $total_stock    = (int) $wpdb->get_var( "SELECT COALESCE(SUM(quantity),0) FROM {$products}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -977,8 +1013,14 @@ ARRAY_A
 );
 $stockouts = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$products} WHERE quantity <= 0" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
+$best_day_name = __( 'N/A', 'olives-pharmacy' );
+if ( $best_day && ! empty( $best_day['day'] ) ) {
+$best_day_name = wp_date( 'l', strtotime( $best_day['day'] ), new DateTimeZone( 'Africa/Lagos' ) );
+}
+$best_day_avg = $this->format_naira( $best_day ? $best_day['avg_total'] : 0 );
+
 $insights = array(
-sprintf( __( 'Best day: %1$s — %2$s avg', 'olives-pharmacy' ), $best_day ? gmdate( 'l', strtotime( $best_day['day'] ) ) : __( 'N/A', 'olives-pharmacy' ), $this->format_naira( $best_day ? $best_day['avg_total'] : 0 ) ),
+sprintf( __( 'Best day: %1$s — %2$s avg', 'olives-pharmacy' ), $best_day_name, $best_day_avg ),
 sprintf( __( 'Most profitable product: %s', 'olives-pharmacy' ), ! empty( $top_products ) ? $top_products[0]['product_name'] : __( 'N/A', 'olives-pharmacy' ) ),
 sprintf( __( 'Stockouts this window: %d', 'olives-pharmacy' ), $stockouts ),
 );
@@ -1063,8 +1105,13 @@ return <<<'JS'
   };
 
   const updateWATClock = () => {
-    const wat = new Date(Date.now() + (3600 * 1000) + (new Date().getTimezoneOffset() * 60 * 1000));
-    const out = wat.toTimeString().slice(0,8);
+    const out = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Lagos',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date());
     qsa('.olives-wat-clock').forEach(el=>{el.textContent = out;});
   };
   updateWATClock();
@@ -1325,9 +1372,9 @@ return <<<'JS'
     const rows = (receipt.items||[]).map(i=>`<tr><td class="py-1">${i.product_name} x${i.quantity}</td><td class="py-1 text-right">${fmt(i.line_total)}</td></tr>`).join('');
     cont.innerHTML = `
       <div class="border rounded-[12px] p-3 bg-slate-50">
-        <div class="text-center font-bold">OLIVES PHARMACY</div>
-        <div class="text-center text-xs">No. 1 Health Street, Uyo</div>
-        <div class="text-center text-xs">+234 800 000 0000</div>
+        <div class="text-center font-bold">${OlivesData.business?.name || 'OLIVES PHARMACY'}</div>
+        <div class="text-center text-xs">${OlivesData.business?.address || ''}</div>
+        <div class="text-center text-xs">${OlivesData.business?.phone || ''}</div>
         <div class="mt-2 text-xs">Receipt: ${receipt.receipt_no}<br>Date: ${receipt.created_at}<br>Staff: ${receipt.staff_name}</div>
         <table class="w-full mt-2 text-xs"><tbody>${rows}</tbody></table>
         <div class="mt-2 border-t pt-2 text-xs">
@@ -1341,8 +1388,9 @@ return <<<'JS'
     qs('#olives-receipt-modal')?.classList.remove('hidden');
 
     qs('#olives-print-receipt')?.addEventListener('click', ()=>{
-      const lines = (receipt.items||[]).map(i=>`${i.product_name.slice(0,16).padEnd(16)} ${String(i.quantity).padStart(2)} ${String(Math.round(i.line_total)).padStart(10)}`).join('\n');
-      const plain = `OLIVES PHARMACY\nNo. 1 Health Street, Uyo\n+234 800 000 0000\n--------------------------------\nReceipt: ${receipt.receipt_no}\nDate: ${receipt.created_at}\nStaff: ${receipt.staff_name}\n--------------------------------\n${lines}\n--------------------------------\nCash: ${Math.round(receipt.cash_amount)}\nCard: ${Math.round(receipt.card_amount)}\nTransfer: ${Math.round(receipt.transfer_amount)}\n<b>TOTAL: ${Math.round(receipt.total_amount)}</b>\n--------------------------------\nThank you for choosing Olives Pharmacy`;
+      const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const lines = (receipt.items||[]).map(i=>`${esc(i.product_name).slice(0,16).padEnd(16)} ${String(i.quantity).padStart(2)} ${String(Math.round(i.line_total)).padStart(10)}`).join('\n');
+      const plain = `${esc(OlivesData.business?.name || 'OLIVES PHARMACY')}\n${esc(OlivesData.business?.address || '')}\n${esc(OlivesData.business?.phone || '')}\n--------------------------------\nReceipt: ${esc(receipt.receipt_no)}\nDate: ${esc(receipt.created_at)}\nStaff: ${esc(receipt.staff_name)}\n--------------------------------\n${lines}\n--------------------------------\nCash: ${Math.round(receipt.cash_amount)}\nCard: ${Math.round(receipt.card_amount)}\nTransfer: ${Math.round(receipt.transfer_amount)}\n<b>TOTAL: ${Math.round(receipt.total_amount)}</b>\n--------------------------------\nThank you for choosing Olives Pharmacy`;
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed'; iframe.style.right='-9999px'; iframe.style.width='58mm';
       document.body.appendChild(iframe);
