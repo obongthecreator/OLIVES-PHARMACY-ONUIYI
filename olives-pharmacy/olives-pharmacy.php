@@ -55,6 +55,21 @@ private $pages = array(
 'slug'      => 'olives-analytics',
 'shortcode' => '[olives_analytics]',
 ),
+'imports'   => array(
+'title'     => 'Olives — Imports',
+'slug'      => 'olives-imports',
+'shortcode' => '[olives_imports]',
+),
+'admin'     => array(
+'title'     => 'Olives — Admin Panel',
+'slug'      => 'olives-admin',
+'shortcode' => '[olives_admin]',
+),
+'profile'   => array(
+'title'     => 'Olives — Profile',
+'slug'      => 'olives-profile',
+'shortcode' => '[olives_profile]',
+),
 );
 
 public static function instance() {
@@ -82,6 +97,14 @@ add_action( 'wp_ajax_olives_dashboard_stats', array( $this, 'ajax_dashboard_stat
 add_action( 'wp_ajax_olives_financial_summary', array( $this, 'ajax_financial_summary' ) );
 add_action( 'wp_ajax_olives_analytics_data', array( $this, 'ajax_analytics_data' ) );
 add_action( 'wp_ajax_olives_activity_log', array( $this, 'ajax_activity_log' ) );
+add_action( 'wp_ajax_olives_imports_list', array( $this, 'ajax_imports_list' ) );
+add_action( 'wp_ajax_olives_imports_save', array( $this, 'ajax_imports_save' ) );
+add_action( 'wp_ajax_olives_users_list', array( $this, 'ajax_users_list' ) );
+add_action( 'wp_ajax_olives_users_save', array( $this, 'ajax_users_save' ) );
+add_action( 'wp_ajax_olives_users_delete', array( $this, 'ajax_users_delete' ) );
+add_action( 'wp_ajax_olives_profile_get', array( $this, 'ajax_profile_get' ) );
+add_action( 'wp_ajax_olives_profile_save', array( $this, 'ajax_profile_save' ) );
+add_action( 'wp_ajax_olives_profile_password', array( $this, 'ajax_profile_password' ) );
 }
 
 public static function activate() {
@@ -94,6 +117,7 @@ $products        = $wpdb->prefix . 'olives_products';
 $sales           = $wpdb->prefix . 'olives_sales';
 $sale_items      = $wpdb->prefix . 'olives_sale_items';
 $stock_history   = $wpdb->prefix . 'olives_stock_history';
+$imports         = $wpdb->prefix . 'olives_imports';
 
 $sql = array();
 $sql[] = "CREATE TABLE {$products} (
@@ -158,6 +182,20 @@ KEY product_id (product_id),
 KEY created_at (created_at)
 ) {$charset_collate};";
 
+$sql[] = "CREATE TABLE {$imports} (
+id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+product_id BIGINT UNSIGNED NOT NULL,
+product_name VARCHAR(191) NOT NULL,
+quantity INT NOT NULL,
+unit_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+note TEXT NULL,
+staff_id BIGINT UNSIGNED NULL,
+created_at DATETIME NOT NULL,
+PRIMARY KEY (id),
+KEY product_id (product_id),
+KEY created_at (created_at)
+) {$charset_collate};";
+
 foreach ( $sql as $query ) {
 dbDelta( $query );
 }
@@ -181,6 +219,7 @@ $wpdb->prefix . 'olives_products',
 $wpdb->prefix . 'olives_sales',
 $wpdb->prefix . 'olives_sale_items',
 $wpdb->prefix . 'olives_stock_history',
+$wpdb->prefix . 'olives_imports',
 );
 foreach ( $tables as $table ) {
 $wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -275,6 +314,9 @@ add_shortcode( 'olives_stock', array( $this, 'shortcode_stock' ) );
 add_shortcode( 'olives_sales', array( $this, 'shortcode_sales' ) );
 add_shortcode( 'olives_financial', array( $this, 'shortcode_financial' ) );
 add_shortcode( 'olives_analytics', array( $this, 'shortcode_analytics' ) );
+add_shortcode( 'olives_imports', array( $this, 'shortcode_imports' ) );
+add_shortcode( 'olives_admin', array( $this, 'shortcode_admin' ) );
+add_shortcode( 'olives_profile', array( $this, 'shortcode_profile' ) );
 }
 
 private function should_load_front_assets() {
@@ -436,7 +478,7 @@ ob_start();
 <?php if ( ! empty( $nav ) ) : ?>
 <div class="mt-4 flex flex-wrap gap-2">
 <?php foreach ( $nav as $link ) : ?>
-<a class="px-4 py-2 rounded-full border transition-all duration-200 <?php echo $link['active'] ? 'bg-olives-green text-white border-olives-green' : 'bg-white text-slate-700 border-slate-200 hover:border-olives-green hover:text-olives-green'; ?>" href="<?php echo esc_url( $link['url'] ); ?>"><?php echo esc_html( $link['label'] ); ?></a>
+<a data-olives-nav-key="<?php echo esc_attr( $link['key'] ); ?>" class="px-4 py-2 rounded-full border transition-all duration-200 <?php echo $link['active'] ? 'bg-olives-green text-white border-olives-green' : 'bg-white text-slate-700 border-slate-200 hover:border-olives-green hover:text-olives-green'; ?>" href="<?php echo esc_url( $link['url'] ); ?>"><?php echo esc_html( $link['label'] ); ?></a>
 <?php endforeach; ?>
 </div>
 <?php endif; ?>
@@ -462,13 +504,16 @@ $html  = $this->wrapper_start( 'home' );
 $html .= '<section class="relative overflow-hidden rounded-[20px] p-6 md:p-10 bg-gradient-to-br from-green-100 via-red-100 to-white">';
 $html .= '<div class="absolute -top-8 -left-8 w-44 h-44 rounded-full bg-green-300/30 blur-2xl"></div><div class="absolute -bottom-8 -right-8 w-44 h-44 rounded-full bg-red-300/30 blur-2xl"></div>';
 $html .= '<div class="relative"><div class="text-center mb-8"><div class="inline-flex items-center gap-2 text-3xl font-extrabold text-olives-green"><iconify-icon icon="solar:leaf-linear"></iconify-icon><span>OLIVES PHARMACY</span></div><p class="text-slate-600 mt-2">Trusted Care, Every Day</p></div>';
-$html .= '<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">';
+$html .= '<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">';
 $cards = array(
 'dashboard' => array( 'solar:widget-2-linear', __( 'Dashboard', 'olives-pharmacy' ), __( 'Overview and quick statistics', 'olives-pharmacy' ) ),
 'stock'     => array( 'solar:box-linear', __( 'Stock', 'olives-pharmacy' ), __( 'Manage products and inventory', 'olives-pharmacy' ) ),
 'sales'     => array( 'solar:cart-large-2-linear', __( 'Sales', 'olives-pharmacy' ), __( 'Process sales and print receipts', 'olives-pharmacy' ) ),
 'financial' => array( 'solar:wallet-money-linear', __( 'Financial', 'olives-pharmacy' ), __( 'Revenue and transaction history', 'olives-pharmacy' ) ),
 'analytics' => array( 'solar:chart-2-linear', __( 'Analytics', 'olives-pharmacy' ), __( 'Trends, insights and activity', 'olives-pharmacy' ) ),
+'imports'   => array( 'solar:inbox-in-linear', __( 'Imports', 'olives-pharmacy' ), __( 'Receive daily stock imports', 'olives-pharmacy' ) ),
+'admin'     => array( 'solar:shield-user-linear', __( 'Admin Panel', 'olives-pharmacy' ), __( 'Manage users and access', 'olives-pharmacy' ) ),
+'profile'   => array( 'solar:user-circle-linear', __( 'Profile', 'olives-pharmacy' ), __( 'Update account details', 'olives-pharmacy' ) ),
 );
 $nav   = $this->nav_links( 'home' );
 $urls  = wp_list_pluck( $nav, 'url', 'key' );
@@ -507,7 +552,7 @@ return $html . $this->login_required_card() . $this->wrapper_end();
 $html .= '<section class="olives-card p-4 mb-4"><div class="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">';
 $html .= '<div class="relative w-full md:max-w-md"><iconify-icon icon="solar:magnifer-linear" class="absolute left-3 top-3 text-slate-400"></iconify-icon><input id="olives-stock-search" class="w-full pl-10 pr-3 py-2 rounded-[20px] border-slate-200" placeholder="Search products..." /></div>';
 $html .= '<div class="flex gap-2"><button id="olives-add-product" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Add Product</button><button id="olives-export-products" class="px-4 py-2 rounded-[20px] border">Export CSV</button></div></div>';
-$html .= '<div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Name</th><th class="p-2">NAFDAC</th><th class="p-2">Batch</th><th class="p-2">Expiry</th><th class="p-2">Qty</th><th class="p-2">Cost</th><th class="p-2">Selling</th><th class="p-2">Reorder</th><th class="p-2">Actions</th></tr></thead><tbody id="olives-stock-tbody"></tbody></table></div></section>';
+$html .= '<div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Name</th><th class="p-2">NAFDAC</th><th class="p-2">Batch</th><th class="p-2">Expiry</th><th class="p-2">Qty</th><th class="p-2">Imported Today</th><th class="p-2">Cost</th><th class="p-2">Selling</th><th class="p-2">Reorder</th><th class="p-2">Actions</th></tr></thead><tbody id="olives-stock-tbody"></tbody></table></div></section>';
 $html .= '<section class="olives-card p-5"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Stock Movement History</h3><button id="olives-stock-full-history" class="px-3 py-2 rounded-[20px] border text-sm">View Full History</button></div><div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Product</th><th class="p-2">Type</th><th class="p-2">Change</th><th class="p-2">After</th><th class="p-2">Staff</th><th class="p-2">Time</th></tr></thead><tbody id="olives-stock-history"></tbody></table></div></section>';
 $html .= $this->modal_markup();
 $html .= $this->wrapper_end();
@@ -534,7 +579,7 @@ if ( ! is_user_logged_in() ) {
 return $html . $this->login_required_card() . $this->wrapper_end();
 }
 $html .= '<section class="olives-card p-4 mb-4"><div class="flex flex-wrap gap-2" id="olives-financial-filters"><button data-range="today" class="px-3 py-2 rounded-full bg-olives-green text-white">Today</button><button data-range="week" class="px-3 py-2 rounded-full border">This Week</button><button data-range="month" class="px-3 py-2 rounded-full border">This Month</button><button data-range="year" class="px-3 py-2 rounded-full border">This Year</button><button data-range="custom" class="px-3 py-2 rounded-full border">Custom</button></div><div id="olives-custom-range" class="hidden mt-3 flex flex-wrap gap-2"><input type="date" id="olives-from" class="rounded-[20px] border-slate-200" /><input type="date" id="olives-to" class="rounded-[20px] border-slate-200" /><button id="olives-apply-custom" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Apply</button></div></section>';
-$html .= '<section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4" id="olives-financial-kpis"></section>';
+$html .= '<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4" id="olives-financial-kpis"></section>';
 $html .= '<section class="olives-card p-5"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Transaction History</h3><button class="px-3 py-2 rounded-[20px] border text-sm">View Full History</button></div><div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Receipt No</th><th class="p-2">Date/Time</th><th class="p-2">Items</th><th class="p-2">Payment</th><th class="p-2">Total</th><th class="p-2">Staff</th></tr></thead><tbody id="olives-financial-history"></tbody></table></div></section>';
 $html .= $this->receipt_modal_markup();
 $html .= $this->wrapper_end();
@@ -549,6 +594,44 @@ return $html . $this->login_required_card() . $this->wrapper_end();
 $html .= '<section class="olives-card p-5 mb-4"><div class="flex items-center justify-between"><h3 class="font-semibold text-lg">Revenue Trend</h3><div class="flex gap-2" id="olives-analytics-days"><button class="px-3 py-2 rounded-full bg-olives-green text-white" data-days="7">7 Days</button><button class="px-3 py-2 rounded-full border" data-days="30">30 Days</button><button class="px-3 py-2 rounded-full border" data-days="90">90 Days</button></div></div><canvas id="olives-revenue-chart" height="100" class="mt-4"></canvas></section>';
 $html .= '<section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4"><div class="olives-card p-5"><h3 class="font-semibold text-lg">Top Products</h3><div id="olives-top-products" class="space-y-3 mt-3"></div></div><div class="olives-card p-5"><h3 class="font-semibold text-lg">Key Insights</h3><div id="olives-insights" class="space-y-2 mt-3"></div></div></section>';
 $html .= '<section class="olives-card p-5"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Activity / System Log</h3><button class="px-3 py-2 rounded-[20px] border text-sm">View Full Activity Log</button></div><div id="olives-activity-log" class="space-y-2 mt-4"></div></section>';
+$html .= $this->wrapper_end();
+return $html;
+}
+
+public function shortcode_imports() {
+$html = $this->wrapper_start( 'imports' );
+if ( ! is_user_logged_in() ) {
+return $html . $this->login_required_card() . $this->wrapper_end();
+}
+$html .= '<section class="olives-card p-4 mb-4"><div class="flex flex-col lg:flex-row gap-3 lg:items-end"><div class="w-full lg:w-1/3"><label class="text-sm font-medium">Product</label><select id="olives-import-product" class="w-full mt-1 rounded-[20px] border-slate-200"></select></div><div class="w-full lg:w-1/4"><label class="text-sm font-medium">Quantity Imported</label><input id="olives-import-qty" type="number" min="1" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div class="w-full lg:w-1/4"><label class="text-sm font-medium">Unit Cost</label><input id="olives-import-cost" type="text" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div class="w-full lg:w-1/3"><label class="text-sm font-medium">Note</label><input id="olives-import-note" type="text" class="w-full mt-1 rounded-[20px] border-slate-200" placeholder="Optional note" /></div><button id="olives-save-import" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Save Import</button></div></section>';
+$html .= '<section class="olives-card p-5"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Today\'s Imports</h3></div><div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Time</th><th class="p-2">Product</th><th class="p-2">Qty</th><th class="p-2">Unit Cost</th><th class="p-2">Staff</th><th class="p-2">Note</th></tr></thead><tbody id="olives-imports-tbody"></tbody></table></div></section>';
+$html .= $this->wrapper_end();
+return $html;
+}
+
+public function shortcode_admin() {
+$html = $this->wrapper_start( 'admin' );
+if ( ! is_user_logged_in() ) {
+return $html . $this->login_required_card() . $this->wrapper_end();
+}
+if ( ! current_user_can( 'manage_options' ) ) {
+$html .= '<section class="olives-card p-6 text-center"><h3 class="text-xl font-semibold">' . esc_html__( 'Administrator access required.', 'olives-pharmacy' ) . '</h3></section>';
+$html .= $this->wrapper_end();
+return $html;
+}
+$html .= '<section class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4"><a class="olives-card p-4" href="#" data-olives-link="stock"><h4 class="font-semibold">Items & Prices</h4><p class="text-sm text-slate-500">Add, edit, update and delete stock items.</p></a><a class="olives-card p-4" href="#" data-olives-link="imports"><h4 class="font-semibold">Daily Imports</h4><p class="text-sm text-slate-500">Record imported quantities for today.</p></a><a class="olives-card p-4" href="#" data-olives-link="financial"><h4 class="font-semibold">Financial Summary</h4><p class="text-sm text-slate-500">Review auto-calculated sales totals.</p></a></section>';
+$html .= '<section class="olives-card p-4 mb-4"><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3"><input type="hidden" id="olives-user-id" /><div><label class="text-sm font-medium">Username</label><input id="olives-user-username" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">Display Name</label><input id="olives-user-display" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">Email</label><input id="olives-user-email" type="email" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">Role</label><select id="olives-user-role" class="w-full mt-1 rounded-[20px] border-slate-200"><option value="administrator">Administrator</option><option value="editor">Editor</option><option value="author">Author</option><option value="shop_manager">Shop Manager</option><option value="subscriber">Subscriber</option></select></div><div><label class="text-sm font-medium">Password</label><input id="olives-user-password" type="password" class="w-full mt-1 rounded-[20px] border-slate-200" placeholder="Required for new user" /></div><div class="flex items-end gap-2"><button id="olives-user-save" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Save User</button><button id="olives-user-reset" class="px-4 py-2 rounded-[20px] border">Reset</button></div></div></section>';
+$html .= '<section class="olives-card p-5"><h3 class="font-semibold text-lg">Users & Capabilities (by Role)</h3><div class="olives-table-wrap mt-4"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="p-2">Username</th><th class="p-2">Display Name</th><th class="p-2">Email</th><th class="p-2">Role</th><th class="p-2">Capabilities</th><th class="p-2">Actions</th></tr></thead><tbody id="olives-users-tbody"></tbody></table></div></section>';
+$html .= $this->wrapper_end();
+return $html;
+}
+
+public function shortcode_profile() {
+$html = $this->wrapper_start( 'profile' );
+if ( ! is_user_logged_in() ) {
+return $html . $this->login_required_card() . $this->wrapper_end();
+}
+$html .= '<section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4"><div class="olives-card p-5"><h3 class="font-semibold text-lg mb-3">Profile Details</h3><div class="space-y-3"><div><label class="text-sm font-medium">Display Name</label><input id="olives-profile-display" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">Email</label><input id="olives-profile-email" type="email" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">Bio</label><textarea id="olives-profile-bio" class="w-full mt-1 rounded-[20px] border-slate-200" rows="4"></textarea></div><div><label class="text-sm font-medium">Profile Picture URL</label><input id="olives-profile-avatar" class="w-full mt-1 rounded-[20px] border-slate-200" placeholder="https://..." /></div><button id="olives-profile-save" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Save Profile</button></div></div><div class="olives-card p-5"><h3 class="font-semibold text-lg mb-3">Security</h3><div class="space-y-3"><div><label class="text-sm font-medium">Current Password</label><input id="olives-profile-current-pass" type="password" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><div><label class="text-sm font-medium">New Password</label><input id="olives-profile-new-pass" type="password" class="w-full mt-1 rounded-[20px] border-slate-200" /></div><button id="olives-profile-change-pass" class="px-4 py-2 rounded-[20px] border">Change Password</button><div id="olives-profile-avatar-preview" class="pt-2"></div></div></div></section>';
 $html .= $this->wrapper_end();
 return $html;
 }
@@ -605,8 +688,32 @@ public function ajax_products_list() {
 $this->ensure_nonce();
 $this->assert_can_read();
 global $wpdb;
-$table = $this->table( 'products' );
-$rows  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY name ASC", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+$table        = $this->table( 'products' );
+$imports      = $this->table( 'imports' );
+$today_prefix = ( new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) ) )->format( 'Y-m-d' ) . '%';
+$rows         = $wpdb->get_results(
+$wpdb->prepare(
+"SELECT p.*,
+COALESCE((SELECT SUM(i.quantity) FROM {$imports} i WHERE i.product_id = p.id AND i.created_at LIKE %s),0) AS imported_today
+FROM {$table} p
+ORDER BY p.name ASC",
+$today_prefix
+),
+ARRAY_A
+);
+if ( empty( $rows ) ) {
+$this->seed_demo_products();
+$rows = $wpdb->get_results(
+$wpdb->prepare(
+"SELECT p.*,
+COALESCE((SELECT SUM(i.quantity) FROM {$imports} i WHERE i.product_id = p.id AND i.created_at LIKE %s),0) AS imported_today
+FROM {$table} p
+ORDER BY p.name ASC",
+$today_prefix
+),
+ARRAY_A
+);
+}
 wp_send_json_success( array( 'products' => $rows ) );
 }
 
@@ -935,7 +1042,10 @@ $table  = $this->table( 'sales' );
 
 $totals = $wpdb->get_row(
 $wpdb->prepare(
-"SELECT COALESCE(SUM(total_amount),0) AS revenue, COUNT(*) AS txns, COALESCE(AVG(total_amount),0) AS avg_sale
+"SELECT COALESCE(SUM(total_amount),0) AS revenue, COUNT(*) AS txns, COALESCE(AVG(total_amount),0) AS avg_sale,
+COALESCE(SUM(cash_amount),0) AS cash_sales,
+COALESCE(SUM(card_amount),0) AS card_sales,
+COALESCE(SUM(transfer_amount),0) AS transfer_sales
 FROM {$table}
 WHERE created_at BETWEEN %s AND %s",
 $period['start'],
@@ -943,6 +1053,20 @@ $period['end']
 ),
 ARRAY_A
 );
+
+$old_cash = (float) $wpdb->get_var(
+$wpdb->prepare(
+"SELECT COALESCE(SUM(cash_amount),0)
+FROM {$table}
+WHERE created_at < %s",
+$period['start']
+)
+);
+$cash_sales = (float) $totals['cash_sales'];
+$card_sales = (float) $totals['card_sales'];
+$transfer   = (float) $totals['transfer_sales'];
+$total      = $transfer + $card_sales + $cash_sales;
+$cash_left  = $old_cash + $cash_sales;
 
 $history = $wpdb->get_results(
 $wpdb->prepare(
@@ -957,7 +1081,22 @@ $period['end']
 ARRAY_A
 );
 
-wp_send_json_success( array( 'totals' => $totals, 'history' => $history ) );
+wp_send_json_success(
+array(
+'totals' => array(
+'revenue'       => $totals['revenue'],
+'txns'          => $totals['txns'],
+'avg_sale'      => $totals['avg_sale'],
+'total_sales'   => $total,
+'transfer'      => $transfer,
+'card'          => $card_sales,
+'cash'          => $cash_sales,
+'old_cash'      => $old_cash,
+'cash_left'     => $cash_left,
+),
+'history' => $history,
+)
+);
 }
 
 private function resolve_period( $range, $from, $to ) {
@@ -1085,6 +1224,259 @@ ARRAY_A
 wp_send_json_success( array( 'activity' => $rows ) );
 }
 
+public function ajax_imports_list() {
+$this->ensure_nonce();
+$this->assert_can_read();
+global $wpdb;
+$imports      = $this->table( 'imports' );
+$today_prefix = ( new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) ) )->format( 'Y-m-d' ) . '%';
+$rows         = $wpdb->get_results(
+$wpdb->prepare( "SELECT * FROM {$imports} WHERE created_at LIKE %s ORDER BY created_at DESC LIMIT 300", $today_prefix ),
+ARRAY_A
+);
+wp_send_json_success( array( 'imports' => $rows ) );
+}
+
+public function ajax_imports_save() {
+$this->ensure_nonce();
+$this->assert_can_write();
+global $wpdb;
+
+$product_id = isset( $_POST['product_id'] ) ? absint( wp_unslash( $_POST['product_id'] ) ) : 0;
+$quantity   = isset( $_POST['quantity'] ) ? absint( wp_unslash( $_POST['quantity'] ) ) : 0;
+$unit_cost  = isset( $_POST['unit_cost'] ) ? floatval( str_replace( ',', '', wp_unslash( $_POST['unit_cost'] ) ) ) : 0;
+$note       = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+if ( $product_id < 1 || $quantity < 1 ) {
+wp_send_json_error( array( 'message' => __( 'Product and quantity are required.', 'olives-pharmacy' ) ), 422 );
+}
+
+$products_table = $this->table( 'products' );
+$imports_table  = $this->table( 'imports' );
+$product        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$products_table} WHERE id=%d", $product_id ), ARRAY_A );
+if ( ! $product ) {
+wp_send_json_error( array( 'message' => __( 'Product not found.', 'olives-pharmacy' ) ), 404 );
+}
+
+$created_at = $this->now_wat();
+$after_qty  = (int) $product['quantity'] + $quantity;
+$user_id    = get_current_user_id();
+
+$tx_result  = $wpdb->query( 'START TRANSACTION' );
+$tx_started = ( false !== $tx_result && empty( $wpdb->last_error ) );
+try {
+$insert_import = $wpdb->insert(
+$imports_table,
+array(
+'product_id'   => $product_id,
+'product_name' => $product['name'],
+'quantity'     => $quantity,
+'unit_cost'    => $unit_cost,
+'note'         => $note,
+'staff_id'     => $user_id,
+'created_at'   => $created_at,
+)
+);
+if ( false === $insert_import ) {
+throw new RuntimeException( __( 'Failed to save import.', 'olives-pharmacy' ) );
+}
+$updated = $wpdb->update(
+$products_table,
+array( 'quantity' => $after_qty, 'updated_at' => $created_at ),
+array( 'id' => $product_id )
+);
+if ( false === $updated ) {
+throw new RuntimeException( __( 'Failed to update product stock.', 'olives-pharmacy' ) );
+}
+$this->log_stock_history( $product_id, $product['name'], 'import', $quantity, $after_qty, $note );
+if ( ! empty( $wpdb->last_error ) ) {
+throw new RuntimeException( __( 'Failed to log stock history.', 'olives-pharmacy' ) );
+}
+if ( $tx_started ) {
+$wpdb->query( 'COMMIT' );
+}
+} catch ( Exception $e ) {
+if ( $tx_started ) {
+$wpdb->query( 'ROLLBACK' );
+}
+wp_send_json_error( array( 'message' => __( 'Unable to save import.', 'olives-pharmacy' ) ), 500 );
+}
+
+wp_send_json_success( array( 'quantity_after' => $after_qty ) );
+}
+
+public function ajax_users_list() {
+$this->ensure_nonce();
+$this->assert_can_write();
+$users = get_users(
+array(
+'orderby' => 'display_name',
+'order'   => 'ASC',
+'fields'  => array( 'ID', 'user_login', 'display_name', 'user_email', 'roles' ),
+)
+);
+$rows = array_map(
+function( $u ) {
+$role          = ! empty( $u->roles ) ? $u->roles[0] : '';
+$wp_role       = get_role( $role );
+$capabilities  = ( $wp_role && is_array( $wp_role->capabilities ) ) ? array_keys( array_filter( $wp_role->capabilities ) ) : array();
+$caps_short    = implode( ', ', array_slice( $capabilities, 0, 6 ) );
+return array(
+'id'           => (int) $u->ID,
+'username'     => $u->user_login,
+'display_name' => $u->display_name,
+'email'        => $u->user_email,
+'role'         => $role,
+'capabilities' => $caps_short,
+);
+},
+$users
+);
+wp_send_json_success( array( 'users' => $rows ) );
+}
+
+public function ajax_users_save() {
+$this->ensure_nonce();
+$this->assert_can_write();
+
+$id          = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0;
+$username    = isset( $_POST['username'] ) ? sanitize_user( wp_unslash( $_POST['username'] ), true ) : '';
+$display     = isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '';
+$email       = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+$role        = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( $_POST['role'] ) ) : 'subscriber';
+$password    = isset( $_POST['password'] ) ? (string) wp_unslash( $_POST['password'] ) : '';
+$roles_obj   = wp_roles();
+$valid_roles = $roles_obj ? array_keys( $roles_obj->roles ) : array( 'subscriber' );
+if ( ! in_array( $role, $valid_roles, true ) ) {
+$role = 'subscriber';
+}
+if ( empty( $display ) || empty( $email ) ) {
+wp_send_json_error( array( 'message' => __( 'Display name and email are required.', 'olives-pharmacy' ) ), 422 );
+}
+
+if ( $id > 0 ) {
+$payload = array(
+'ID'           => $id,
+'display_name' => $display,
+'user_email'   => $email,
+'role'         => $role,
+);
+if ( ! empty( $password ) ) {
+$payload['user_pass'] = $password;
+}
+$result = wp_update_user( $payload );
+if ( is_wp_error( $result ) ) {
+wp_send_json_error( array( 'message' => $result->get_error_message() ), 422 );
+}
+wp_send_json_success( array( 'id' => $id ) );
+}
+
+if ( empty( $username ) || empty( $password ) ) {
+wp_send_json_error( array( 'message' => __( 'Username and password are required for new users.', 'olives-pharmacy' ) ), 422 );
+}
+$new_id = wp_insert_user(
+array(
+'user_login'   => $username,
+'user_pass'    => $password,
+'display_name' => $display,
+'user_email'   => $email,
+'role'         => $role,
+)
+);
+if ( is_wp_error( $new_id ) ) {
+wp_send_json_error( array( 'message' => $new_id->get_error_message() ), 422 );
+}
+wp_send_json_success( array( 'id' => (int) $new_id ) );
+}
+
+public function ajax_users_delete() {
+$this->ensure_nonce();
+$this->assert_can_write();
+$id = isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0;
+if ( $id < 1 ) {
+wp_send_json_error( array( 'message' => __( 'Invalid user.', 'olives-pharmacy' ) ), 422 );
+}
+if ( $id === get_current_user_id() ) {
+wp_send_json_error( array( 'message' => __( 'You cannot delete your own account.', 'olives-pharmacy' ) ), 422 );
+}
+require_once ABSPATH . 'wp-admin/includes/user.php';
+$deleted = wp_delete_user( $id );
+if ( ! $deleted ) {
+wp_send_json_error( array( 'message' => __( 'Unable to delete user.', 'olives-pharmacy' ) ), 500 );
+}
+wp_send_json_success();
+}
+
+public function ajax_profile_get() {
+$this->ensure_nonce();
+$this->assert_can_read();
+$user = wp_get_current_user();
+if ( ! $user || ! $user->exists() ) {
+wp_send_json_error( array( 'message' => __( 'User not found.', 'olives-pharmacy' ) ), 404 );
+}
+$avatar = get_user_meta( $user->ID, 'olives_profile_avatar', true );
+if ( empty( $avatar ) ) {
+$avatar = get_avatar_url( $user->ID );
+}
+wp_send_json_success(
+array(
+'display_name' => $user->display_name,
+'email'        => $user->user_email,
+'bio'          => $user->description,
+'avatar'       => $avatar,
+)
+);
+}
+
+public function ajax_profile_save() {
+$this->ensure_nonce();
+$this->assert_can_read();
+$user = wp_get_current_user();
+if ( ! $user || ! $user->exists() ) {
+wp_send_json_error( array( 'message' => __( 'User not found.', 'olives-pharmacy' ) ), 404 );
+}
+$display = isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '';
+$email   = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+$bio     = isset( $_POST['bio'] ) ? sanitize_textarea_field( wp_unslash( $_POST['bio'] ) ) : '';
+$avatar  = isset( $_POST['avatar'] ) ? esc_url_raw( wp_unslash( $_POST['avatar'] ) ) : '';
+if ( empty( $display ) || empty( $email ) ) {
+wp_send_json_error( array( 'message' => __( 'Display name and email are required.', 'olives-pharmacy' ) ), 422 );
+}
+$result = wp_update_user(
+array(
+'ID'           => $user->ID,
+'display_name' => $display,
+'user_email'   => $email,
+'description'  => $bio,
+)
+);
+if ( is_wp_error( $result ) ) {
+wp_send_json_error( array( 'message' => $result->get_error_message() ), 422 );
+}
+update_user_meta( $user->ID, 'olives_profile_avatar', $avatar );
+wp_send_json_success();
+}
+
+public function ajax_profile_password() {
+$this->ensure_nonce();
+$this->assert_can_read();
+$user = wp_get_current_user();
+if ( ! $user || ! $user->exists() ) {
+wp_send_json_error( array( 'message' => __( 'User not found.', 'olives-pharmacy' ) ), 404 );
+}
+$current = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
+$new     = isset( $_POST['new_password'] ) ? (string) wp_unslash( $_POST['new_password'] ) : '';
+if ( strlen( $new ) < 8 ) {
+wp_send_json_error( array( 'message' => __( 'New password must be at least 8 characters.', 'olives-pharmacy' ) ), 422 );
+}
+if ( ! wp_check_password( $current, $user->user_pass, $user->ID ) ) {
+wp_send_json_error( array( 'message' => __( 'Current password is incorrect.', 'olives-pharmacy' ) ), 422 );
+}
+wp_set_password( $new, $user->ID );
+wp_set_current_user( $user->ID );
+wp_set_auth_cookie( $user->ID );
+wp_send_json_success();
+}
+
 public function register_admin_menu() {
 add_menu_page(
 __( 'Olives Pharmacy', 'olives-pharmacy' ),
@@ -1102,6 +1494,9 @@ add_submenu_page( 'olives-pharmacy', __( 'Stock', 'olives-pharmacy' ), __( 'Stoc
 add_submenu_page( 'olives-pharmacy', __( 'Sales', 'olives-pharmacy' ), __( 'Sales', 'olives-pharmacy' ), 'manage_options', 'olives-pharmacy-sales', array( $this, 'admin_page_sales' ) );
 add_submenu_page( 'olives-pharmacy', __( 'Financial', 'olives-pharmacy' ), __( 'Financial', 'olives-pharmacy' ), 'manage_options', 'olives-pharmacy-financial', array( $this, 'admin_page_financial' ) );
 add_submenu_page( 'olives-pharmacy', __( 'Analytics', 'olives-pharmacy' ), __( 'Analytics', 'olives-pharmacy' ), 'manage_options', 'olives-pharmacy-analytics', array( $this, 'admin_page_analytics' ) );
+add_submenu_page( 'olives-pharmacy', __( 'Imports', 'olives-pharmacy' ), __( 'Imports', 'olives-pharmacy' ), 'manage_options', 'olives-pharmacy-imports', array( $this, 'admin_page_imports' ) );
+add_submenu_page( 'olives-pharmacy', __( 'Admin Panel', 'olives-pharmacy' ), __( 'Admin Panel', 'olives-pharmacy' ), 'manage_options', 'olives-pharmacy-admin', array( $this, 'admin_page_admin' ) );
+add_submenu_page( 'olives-pharmacy', __( 'Profile', 'olives-pharmacy' ), __( 'Profile', 'olives-pharmacy' ), 'read', 'olives-pharmacy-profile', array( $this, 'admin_page_profile' ) );
 }
 
 public function admin_page_home() {
@@ -1121,6 +1516,15 @@ echo do_shortcode( '[olives_financial]' ); // phpcs:ignore WordPress.Security.Es
 }
 public function admin_page_analytics() {
 echo do_shortcode( '[olives_analytics]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+}
+public function admin_page_imports() {
+echo do_shortcode( '[olives_imports]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+}
+public function admin_page_admin() {
+echo do_shortcode( '[olives_admin]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+}
+public function admin_page_profile() {
+echo do_shortcode( '[olives_profile]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 }
 
 private function inline_js() {
@@ -1175,6 +1579,17 @@ return <<<'JS'
     cash_transfer_card: ['cash','transfer','card']
   };
 
+  const bindQuickLinks = () => {
+    qsa('[data-olives-link]').forEach(el=>{
+      el.addEventListener('click', (e)=>{
+        e.preventDefault();
+        const key = el.getAttribute('data-olives-link');
+        const navTarget = qs(`[data-olives-nav-key="${key}"]`);
+        if (navTarget?.getAttribute('href')) window.location.href = navTarget.getAttribute('href');
+      });
+    });
+  };
+
   const renderDashboard = async () => {
     const statsWrap = qs('#olives-dashboard-stats');
     if (!statsWrap) return;
@@ -1213,7 +1628,7 @@ return <<<'JS'
           if (diff < 0) exp = '<span class="ml-1 px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">Expired</span>';
           else if (diff <= 30) exp = '<span class="ml-1 px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700">Expiring soon</span>';
         }
-        return `<tr class="border-b ${low?'bg-red-50':''}" data-row="${p.id}"><td class="p-2 font-medium">${p.name}${low?'<span class="ml-1 px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">Low</span>':''}</td><td class="p-2">${p.nafdac_number||'-'}</td><td class="p-2">${p.batch_number||'-'}</td><td class="p-2">${p.expiry_date||'-'}${exp}</td><td class="p-2">${qty}</td><td class="p-2">${fmt(p.cost_price)}</td><td class="p-2">${fmt(p.selling_price)}</td><td class="p-2">${reorder}</td><td class="p-2"><button class="text-olives-green mr-2" data-edit="${p.id}">Edit</button><button class="text-olives-red" data-del="${p.id}">Delete</button></td></tr>`;
+        return `<tr class="border-b ${low?'bg-red-50':''}" data-row="${p.id}"><td class="p-2 font-medium">${p.name}${low?'<span class="ml-1 px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">Low</span>':''}</td><td class="p-2">${p.nafdac_number||'-'}</td><td class="p-2">${p.batch_number||'-'}</td><td class="p-2">${p.expiry_date||'-'}${exp}</td><td class="p-2">${qty}</td><td class="p-2">${Number(p.imported_today||0)}</td><td class="p-2">${fmt(p.cost_price)}</td><td class="p-2">${fmt(p.selling_price)}</td><td class="p-2">${reorder}</td><td class="p-2"><button class="text-olives-green mr-2" data-edit="${p.id}">Edit</button><button class="text-olives-red" data-del="${p.id}">Delete</button></td></tr>`;
       }).join('');
       tbody.innerHTML = buildRows(state.products);
       const search = qs('#olives-stock-search');
@@ -1223,7 +1638,7 @@ return <<<'JS'
       };
       bindStockActions();
       await renderStockHistory();
-    } catch(e){ tbody.innerHTML = `<tr><td class="p-2 text-olives-red" colspan="9">${e.message}</td></tr>`; }
+    } catch(e){ tbody.innerHTML = `<tr><td class="p-2 text-olives-red" colspan="10">${e.message}</td></tr>`; }
   };
 
   const bindStockActions = () => {
@@ -1256,8 +1671,8 @@ return <<<'JS'
       try { await ajax('products_save',payload); modal.classList.add('hidden'); await renderStock(); } catch(err){ alert(err.message); }
     });
     qs('#olives-export-products')?.addEventListener('click', ()=>{
-      const headers = ['Name','NAFDAC Number','Batch','Expiry','Quantity','Cost Price','Selling Price','Reorder Level'];
-      const rows = state.products.map(p=>[p.name,p.nafdac_number,p.batch_number,p.expiry_date,p.quantity,p.cost_price,p.selling_price,p.reorder_level]);
+      const headers = ['Name','NAFDAC Number','Batch','Expiry','Quantity','Imported Today','Cost Price','Selling Price','Reorder Level'];
+      const rows = state.products.map(p=>[p.name,p.nafdac_number,p.batch_number,p.expiry_date,p.quantity,p.imported_today || 0,p.cost_price,p.selling_price,p.reorder_level]);
       const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
       const blob = new Blob([csv],{type:'text/csv'});
       const a = document.createElement('a');
@@ -1467,7 +1882,12 @@ return <<<'JS'
         const kpi = qs('#olives-financial-kpis');
         if (kpi) {
           const cards = [
-            ['Total Revenue', fmt(data.totals.revenue), 'solar:wallet-money-linear'],
+            ['Total Sales', fmt(data.totals.total_sales), 'solar:wallet-money-linear'],
+            ['Transfer', fmt(data.totals.transfer), 'solar:card-transfer-linear'],
+            ['Card', fmt(data.totals.card), 'solar:card-linear'],
+            ['Cash', fmt(data.totals.cash), 'solar:hand-money-linear'],
+            ['Old Cash (Prev Day)', fmt(data.totals.old_cash), 'solar:history-linear'],
+            ['Cash Left', fmt(data.totals.cash_left), 'solar:safe-2-linear'],
             ['Total Transactions', data.totals.txns, 'solar:document-text-linear'],
             ['Average Sale', fmt(data.totals.avg_sale), 'solar:chart-2-linear']
           ];
@@ -1495,6 +1915,137 @@ return <<<'JS'
     qs('#olives-apply-custom')?.addEventListener('click',()=>load('custom', qs('#olives-from')?.value || '', qs('#olives-to')?.value || ''));
     qs('#olives-close-receipt')?.addEventListener('click', ()=>qs('#olives-receipt-modal')?.classList.add('hidden'));
     load('today');
+  };
+
+  const initImports = async () => {
+    try {
+      const p = await ajax('products_list');
+      const products = p.products || [];
+      const sel = qs('#olives-import-product');
+      if (sel) {
+        sel.innerHTML = products.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+      }
+    } catch(e) {}
+
+    const loadImports = async () => {
+      const body = qs('#olives-imports-tbody');
+      if (!body) return;
+      try {
+        const data = await ajax('imports_list');
+        body.innerHTML = (data.imports || []).map(r=>`<tr class="border-b"><td class="p-2">${r.created_at}</td><td class="p-2">${r.product_name}</td><td class="p-2">${r.quantity}</td><td class="p-2">${fmt(r.unit_cost)}</td><td class="p-2">${r.staff_id || '-'}</td><td class="p-2">${r.note || '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No imports for today.</td></tr>';
+      } catch(e){
+        body.innerHTML = `<tr><td colspan="6" class="p-2 text-olives-red">${e.message}</td></tr>`;
+      }
+    };
+
+    qs('#olives-save-import')?.addEventListener('click', async ()=>{
+      const product_id = qs('#olives-import-product')?.value || '';
+      const quantity = qs('#olives-import-qty')?.value || '';
+      const unit_cost = qs('#olives-import-cost')?.value || '';
+      const note = qs('#olives-import-note')?.value || '';
+      try {
+        await ajax('imports_save', {product_id, quantity, unit_cost, note});
+        qs('#olives-import-qty').value = '';
+        qs('#olives-import-cost').value = '';
+        qs('#olives-import-note').value = '';
+        await loadImports();
+        alert('Import saved.');
+      } catch(e){ alert(e.message); }
+    });
+    await loadImports();
+  };
+
+  const initAdmin = async () => {
+    bindQuickLinks();
+    const resetForm = () => {
+      ['#olives-user-id','#olives-user-username','#olives-user-display','#olives-user-email','#olives-user-password'].forEach(s=>{ const el=qs(s); if (el) el.value=''; });
+      const role = qs('#olives-user-role');
+      if (role) role.value = 'subscriber';
+    };
+    const loadUsers = async () => {
+      const tbody = qs('#olives-users-tbody');
+      if (!tbody) return;
+      try {
+        const data = await ajax('users_list');
+        const users = data.users || [];
+        tbody.innerHTML = users.map(u=>`<tr class="border-b"><td class="p-2">${u.username}</td><td class="p-2">${u.display_name}</td><td class="p-2">${u.email}</td><td class="p-2">${u.role || '-'}</td><td class="p-2 text-xs">${u.capabilities || '-'}</td><td class="p-2"><button class="text-olives-green mr-2" data-user-edit="${u.id}">Edit</button><button class="text-olives-red" data-user-del="${u.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No users found.</td></tr>';
+        qsa('[data-user-edit]').forEach(btn=>btn.onclick = ()=>{
+          const id = Number(btn.dataset.userEdit);
+          const user = users.find(x=>Number(x.id)===id);
+          if (!user) return;
+          qs('#olives-user-id').value = user.id;
+          qs('#olives-user-username').value = user.username;
+          qs('#olives-user-display').value = user.display_name;
+          qs('#olives-user-email').value = user.email;
+          qs('#olives-user-role').value = user.role || 'subscriber';
+          qs('#olives-user-password').value = '';
+        });
+        qsa('[data-user-del]').forEach(btn=>btn.onclick = async ()=>{
+          if (!confirm('Delete this user?')) return;
+          try { await ajax('users_delete', {id: btn.dataset.userDel}); await loadUsers(); } catch(e){ alert(e.message); }
+        });
+      } catch(e){
+        tbody.innerHTML = `<tr><td colspan="6" class="p-2 text-olives-red">${e.message}</td></tr>`;
+      }
+    };
+    qs('#olives-user-save')?.addEventListener('click', async ()=>{
+      const payload = {
+        id: qs('#olives-user-id')?.value || '',
+        username: qs('#olives-user-username')?.value || '',
+        display_name: qs('#olives-user-display')?.value || '',
+        email: qs('#olives-user-email')?.value || '',
+        role: qs('#olives-user-role')?.value || 'subscriber',
+        password: qs('#olives-user-password')?.value || ''
+      };
+      try {
+        await ajax('users_save', payload);
+        resetForm();
+        await loadUsers();
+        alert('User saved.');
+      } catch(e){ alert(e.message); }
+    });
+    qs('#olives-user-reset')?.addEventListener('click', resetForm);
+    await loadUsers();
+  };
+
+  const initProfile = async () => {
+    const avatarPreview = () => {
+      const box = qs('#olives-profile-avatar-preview');
+      const url = qs('#olives-profile-avatar')?.value || '';
+      if (!box) return;
+      box.innerHTML = url ? `<img src="${url}" alt="Profile" class="w-16 h-16 rounded-full border object-cover" />` : '';
+    };
+    try {
+      const data = await ajax('profile_get');
+      qs('#olives-profile-display').value = data.display_name || '';
+      qs('#olives-profile-email').value = data.email || '';
+      qs('#olives-profile-bio').value = data.bio || '';
+      qs('#olives-profile-avatar').value = data.avatar || '';
+      avatarPreview();
+    } catch(e){ alert(e.message); }
+
+    qs('#olives-profile-avatar')?.addEventListener('input', avatarPreview);
+    qs('#olives-profile-save')?.addEventListener('click', async ()=>{
+      try {
+        await ajax('profile_save', {
+          display_name: qs('#olives-profile-display')?.value || '',
+          email: qs('#olives-profile-email')?.value || '',
+          bio: qs('#olives-profile-bio')?.value || '',
+          avatar: qs('#olives-profile-avatar')?.value || ''
+        });
+        alert('Profile updated.');
+      } catch(e){ alert(e.message); }
+    });
+    qs('#olives-profile-change-pass')?.addEventListener('click', async ()=>{
+      const current_password = qs('#olives-profile-current-pass')?.value || '';
+      const new_password = qs('#olives-profile-new-pass')?.value || '';
+      try {
+        await ajax('profile_password', {current_password, new_password});
+        qs('#olives-profile-current-pass').value = '';
+        qs('#olives-profile-new-pass').value = '';
+        alert('Password changed successfully.');
+      } catch(e){ alert(e.message); }
+    });
   };
 
   const initAnalytics = async () => {
@@ -1538,11 +2089,15 @@ return <<<'JS'
     draw(30);
   };
 
+  bindQuickLinks();
   if (page === 'dashboard') renderDashboard();
   if (page === 'stock') renderStock();
   if (page === 'sales') initSales();
   if (page === 'financial') initFinancial();
   if (page === 'analytics') initAnalytics();
+  if (page === 'imports') initImports();
+  if (page === 'admin') initAdmin();
+  if (page === 'profile') initProfile();
 })();
 JS;
 }
