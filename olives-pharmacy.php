@@ -405,7 +405,9 @@ return '
 .olives-card{border-radius:20px;background:#fff;box-shadow:0 4px 24px rgba(15,23,42,.06);border:1px solid #e2e8f0}
 .olives-header{position:sticky;top:16px;z-index:30;border-radius:20px;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);box-shadow:0 8px 28px rgba(15,23,42,.10);border:1px solid #e2e8f0}
 .olives-app a,.olives-app a:hover,.olives-app a:focus{text-decoration:none!important}
-.olives-app button,.olives-app input[type="button"],.olives-app input[type="submit"],.olives-app .button{border-radius:20px}
+.olives-app button,.olives-app input[type="button"],.olives-app input[type="submit"],.olives-app .button{border-radius:20px;background:linear-gradient(135deg,#86efac,#22c55e)!important;color:#fff!important;border-color:transparent!important}
+.olives-app button:hover,.olives-app input[type="button"]:hover,.olives-app input[type="submit"]:hover,.olives-app .button:hover{filter:brightness(.98)}
+.olives-app button:disabled,.olives-app input[type="button"]:disabled,.olives-app input[type="submit"]:disabled{background:#cbd5e1!important;color:#fff!important;cursor:not-allowed}
 .olives-glass{backdrop-filter: blur(10px);background:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.4)}
 .olives-table-wrap{overflow:auto}
 .olives-skeleton{position:relative;overflow:hidden;background:#e2e8f0}
@@ -639,7 +641,7 @@ return $html;
 }
 
 private function modal_markup() {
-return '<div id="olives-product-modal" class="hidden fixed inset-0 bg-slate-900/40 z-50 p-4"><div class="max-w-2xl mx-auto olives-glass rounded-[20px] p-4 bg-white/90"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Product</h3><button id="olives-close-product-modal" aria-label="Close">✕</button></div><form id="olives-product-form" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3"><input type="hidden" name="id" /><input name="name" placeholder="Name" class="rounded-[20px] border-slate-200" required /><input name="nafdac_number" placeholder="NAFDAC Number" maxlength="20" class="rounded-[20px] border-slate-200" /><input name="batch_number" placeholder="Batch Number" class="rounded-[20px] border-slate-200" /><input type="date" name="expiry_date" class="rounded-[20px] border-slate-200" /><input type="number" name="quantity" min="0" placeholder="Quantity" class="rounded-[20px] border-slate-200" required /><input name="cost_price" placeholder="Cost Price" class="rounded-[20px] border-slate-200" required /><input name="selling_price" placeholder="Selling Price" class="rounded-[20px] border-slate-200" required /><input type="number" name="reorder_level" min="0" placeholder="Reorder Level" class="rounded-[20px] border-slate-200" required /><div class="md:col-span-2 flex justify-end gap-2"><button type="button" id="olives-cancel-product" class="px-4 py-2 rounded-[20px] border">Cancel</button><button type="submit" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Save Product</button></div></form></div></div>';
+return '<div id="olives-product-modal" class="hidden fixed inset-0 bg-slate-900/40 z-50 p-4"><div class="max-w-2xl mx-auto olives-glass rounded-[20px] p-4 bg-white/90"><div class="flex justify-between items-center"><h3 class="font-semibold text-lg">Product</h3><button id="olives-close-product-modal" aria-label="Close">✕</button></div><form id="olives-product-form" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3"><input type="hidden" name="id" /><input name="name" placeholder="Name" class="rounded-[20px] border-slate-200" required /><input name="nafdac_number" placeholder="NAFDAC Number" maxlength="20" class="rounded-[20px] border-slate-200" /><input name="batch_number" placeholder="Batch Number" class="rounded-[20px] border-slate-200" /><input type="date" name="expiry_date" class="rounded-[20px] border-slate-200" /><input type="number" name="quantity" min="0" placeholder="Quantity" class="rounded-[20px] border-slate-200" required /><input name="cost_price" placeholder="Cost Price" class="rounded-[20px] border-slate-200" /><input name="selling_price" placeholder="Selling Price" class="rounded-[20px] border-slate-200" /><input type="number" name="reorder_level" min="0" placeholder="Reorder Level" class="rounded-[20px] border-slate-200" required /><div class="md:col-span-2"><label class="text-sm font-medium block mb-1">Forms to show this product</label><div class="flex flex-wrap gap-3 text-sm"><label class="inline-flex items-center gap-2"><input type="checkbox" name="form_targets[]" value="sales" checked /> Sales</label><label class="inline-flex items-center gap-2"><input type="checkbox" name="form_targets[]" value="imports" checked /> Imports</label><label class="inline-flex items-center gap-2"><input type="checkbox" name="form_targets[]" value="stock" checked /> Stock</label></div><p class="text-xs text-slate-500 mt-1">Selling price is required when Sales is selected.</p></div><div class="md:col-span-2 flex justify-end gap-2"><button type="button" id="olives-cancel-product" class="px-4 py-2 rounded-[20px] border">Cancel</button><button type="submit" class="px-4 py-2 rounded-[20px] bg-olives-green text-white">Save Product</button></div></form></div></div>';
 }
 
 private function receipt_modal_markup() {
@@ -667,6 +669,70 @@ wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'olives
 private function table( $name ) {
 global $wpdb;
 return $wpdb->prefix . 'olives_' . $name;
+}
+
+private function default_form_targets() {
+return array( 'stock', 'sales', 'imports' );
+}
+
+private function normalize_form_targets( $raw ) {
+$allowed = $this->default_form_targets();
+if ( is_string( $raw ) ) {
+$raw = explode( ',', $raw );
+}
+if ( ! is_array( $raw ) ) {
+$raw = array();
+}
+$clean = array();
+foreach ( $raw as $target ) {
+$target = sanitize_key( (string) $target );
+if ( in_array( $target, $allowed, true ) ) {
+$clean[] = $target;
+}
+}
+$clean = array_values( array_unique( $clean ) );
+if ( empty( $clean ) ) {
+return $allowed;
+}
+return $clean;
+}
+
+private function product_form_targets_map() {
+$raw = get_option( 'olives_product_form_targets', array() );
+if ( ! is_array( $raw ) ) {
+return array();
+}
+$map = array();
+foreach ( $raw as $product_id => $targets ) {
+$id = absint( $product_id );
+if ( $id < 1 ) {
+continue;
+}
+$map[ $id ] = $this->normalize_form_targets( $targets );
+}
+return $map;
+}
+
+private function save_product_form_targets( $product_id, $targets ) {
+$id = absint( $product_id );
+if ( $id < 1 ) {
+return;
+}
+$map        = $this->product_form_targets_map();
+$map[ $id ] = $this->normalize_form_targets( $targets );
+update_option( 'olives_product_form_targets', $map, false );
+}
+
+private function delete_product_form_targets( $product_id ) {
+$id = absint( $product_id );
+if ( $id < 1 ) {
+return;
+}
+$map = $this->product_form_targets_map();
+if ( isset( $map[ $id ] ) ) {
+unset( $map[ $id ] );
+update_option( 'olives_product_form_targets', $map, false );
+}
 }
 
 		private function now_wat() {
@@ -716,6 +782,15 @@ $today_prefix
 ARRAY_A
 );
 }
+if ( ! empty( $rows ) ) {
+$targets_map = $this->product_form_targets_map();
+foreach ( $rows as &$row ) {
+$product_id            = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+$targets               = isset( $targets_map[ $product_id ] ) ? $targets_map[ $product_id ] : $this->default_form_targets();
+$row['form_targets']   = implode( ',', $targets );
+}
+unset( $row );
+}
 wp_send_json_success( array( 'products' => $rows ) );
 }
 
@@ -733,6 +808,7 @@ $quantity      = isset( $_POST['quantity'] ) ? absint( wp_unslash( $_POST['quant
 $cost_price    = isset( $_POST['cost_price'] ) ? floatval( str_replace( ',', '', wp_unslash( $_POST['cost_price'] ) ) ) : 0;
 $selling_price = isset( $_POST['selling_price'] ) ? floatval( str_replace( ',', '', wp_unslash( $_POST['selling_price'] ) ) ) : 0;
 $reorder_level = isset( $_POST['reorder_level'] ) ? absint( wp_unslash( $_POST['reorder_level'] ) ) : 0;
+$form_targets  = isset( $_POST['form_targets'] ) ? $this->normalize_form_targets( sanitize_text_field( wp_unslash( $_POST['form_targets'] ) ) ) : $this->default_form_targets();
 
 if ( '' === $name ) {
 wp_send_json_error( array( 'message' => __( 'Product name is required.', 'olives-pharmacy' ) ), 422 );
@@ -742,6 +818,9 @@ wp_send_json_error( array( 'message' => __( 'NAFDAC Number cannot exceed 20 char
 }
 if ( strlen( $batch_number ) > 50 ) {
 wp_send_json_error( array( 'message' => __( 'Batch Number cannot exceed 50 characters.', 'olives-pharmacy' ) ), 422 );
+}
+if ( in_array( 'sales', $form_targets, true ) && $selling_price <= 0 ) {
+wp_send_json_error( array( 'message' => __( 'Selling price is required for Sales form.', 'olives-pharmacy' ) ), 422 );
 }
 
 $table = $this->table( 'products' );
@@ -768,6 +847,7 @@ $wpdb->insert( $table, $data );
 $id = (int) $wpdb->insert_id;
 $this->log_stock_history( $id, $name, 'added', $quantity, $quantity, __( 'Product created', 'olives-pharmacy' ) );
 }
+$this->save_product_form_targets( $id, $form_targets );
 
 wp_send_json_success( array( 'id' => $id ) );
 }
@@ -784,6 +864,7 @@ wp_send_json_error( array( 'message' => __( 'Product not found.', 'olives-pharma
 }
 $wpdb->delete( $table, array( 'id' => $id ) );
 $this->log_stock_history( $id, $item['name'], 'adjustment', -(int) $item['quantity'], 0, __( 'Product deleted', 'olives-pharmacy' ) );
+$this->delete_product_form_targets( $id );
 wp_send_json_success();
 }
 
@@ -990,7 +1071,15 @@ $this->ensure_nonce();
 $this->assert_can_read();
 global $wpdb;
 $table = $this->table( 'stock_history' );
-$rows  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY created_at DESC LIMIT 500", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+$users = $wpdb->users;
+$rows  = $wpdb->get_results(
+"SELECT h.*, COALESCE(NULLIF(u.display_name,''), u.user_login) AS staff_name
+FROM {$table} h
+LEFT JOIN {$users} u ON h.staff_id = u.ID
+ORDER BY h.created_at DESC
+LIMIT 500",
+ARRAY_A
+); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 wp_send_json_success( array( 'history' => $rows ) );
 }
 
@@ -1231,9 +1320,18 @@ $this->ensure_nonce();
 $this->assert_can_read();
 global $wpdb;
 $imports      = $this->table( 'imports' );
+$users        = $wpdb->users;
 $today_prefix = ( new DateTime( 'now', new DateTimeZone( 'Africa/Lagos' ) ) )->format( 'Y-m-d' ) . '%';
 $rows         = $wpdb->get_results(
-$wpdb->prepare( "SELECT * FROM {$imports} WHERE created_at LIKE %s ORDER BY created_at DESC LIMIT 300", $today_prefix ),
+$wpdb->prepare(
+"SELECT i.*, COALESCE(NULLIF(u.display_name,''), u.user_login) AS staff_name
+FROM {$imports} i
+LEFT JOIN {$users} u ON i.staff_id = u.ID
+WHERE i.created_at LIKE %s
+ORDER BY i.created_at DESC
+LIMIT 300",
+$today_prefix
+),
 ARRAY_A
 );
 wp_send_json_success( array( 'imports' => $rows ) );
@@ -1570,6 +1668,12 @@ return <<<'JS'
 
   const page = pageEl.getAttribute('data-olives-page');
   const state = { products: [], cart: [], chart: null, autoBalanceIndex: -1 };
+  const formTargets = p => {
+    const raw = String(p?.form_targets || '').trim();
+    if (!raw) return ['stock','sales','imports'];
+    return raw.split(',').map(x=>x.trim()).filter(Boolean);
+  };
+  const productInForm = (p, key) => formTargets(p).includes(key);
 
   const paymentMap = {
     cash: ['cash'],
@@ -1614,10 +1718,10 @@ return <<<'JS'
 
   const renderStock = async () => {
     const tbody = qs('#olives-stock-tbody');
-    if (!tbody) return;
     try {
       const data = await ajax('products_list');
       state.products = data.products || [];
+      if (!tbody) return;
       const today = new Date();
       const buildRows = list => list.map(p=>{
         const qty = Number(p.quantity||0);
@@ -1653,6 +1757,10 @@ return <<<'JS'
         const f = form.querySelector(`[name="${k}"]`);
         if (f) f.value = row[k] ?? '';
       });
+      const targets = formTargets(row);
+      qsa('input[name="form_targets[]"]', form).forEach(cb=>{ cb.checked = targets.includes(cb.value); });
+      const sellingPrice = form.querySelector('[name="selling_price"]');
+      if (sellingPrice) sellingPrice.required = targets.includes('sales');
     };
     qs('#olives-add-product')?.addEventListener('click', ()=>open({}));
     qs('#olives-close-product-modal')?.addEventListener('click', ()=>modal.classList.add('hidden'));
@@ -1665,11 +1773,20 @@ return <<<'JS'
       if (!confirm('Delete this product?')) return;
       try { await ajax('products_delete',{id: btn.dataset.del}); await renderStock(); } catch(e){ alert(e.message); }
     });
+    qsa('input[name="form_targets[]"]', form).forEach(cb=>cb.addEventListener('change', ()=>{
+      const targets = qsa('input[name="form_targets[]"]:checked', form).map(x=>x.value);
+      const sellingPrice = form.querySelector('[name="selling_price"]');
+      if (sellingPrice) sellingPrice.required = targets.includes('sales');
+    }));
     form?.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(form);
       const payload = {};
-      fd.forEach((v,k)=>payload[k]=v);
+      fd.forEach((v,k)=>{
+        if (k === 'form_targets[]') return;
+        payload[k]=v;
+      });
+      payload.form_targets = qsa('input[name="form_targets[]"]:checked', form).map(x=>x.value).join(',');
       try { await ajax('products_save',payload); modal.classList.add('hidden'); await renderStock(); } catch(err){ alert(err.message); }
     });
     qs('#olives-export-products')?.addEventListener('click', ()=>{
@@ -1688,7 +1805,7 @@ return <<<'JS'
     try {
       const data = await ajax('stock_history_list');
       const history = data.history || [];
-      tbody.innerHTML = history.slice(0,10).map(h=>`<tr class="border-b"><td class="p-2">${h.product_name}</td><td class="p-2"><span class="px-2 py-1 rounded-full text-xs bg-slate-100">${h.change_type}</span></td><td class="p-2 ${Number(h.quantity_change)<0?'text-olives-red':'text-olives-green'}">${Number(h.quantity_change)>0?'+':''}${h.quantity_change}</td><td class="p-2">${h.quantity_after}</td><td class="p-2">${h.staff_id || '-'}</td><td class="p-2">${relTime(h.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No history.</td></tr>';
+      tbody.innerHTML = history.slice(0,10).map(h=>`<tr class="border-b"><td class="p-2">${h.product_name}</td><td class="p-2"><span class="px-2 py-1 rounded-full text-xs bg-slate-100">${h.change_type}</span></td><td class="p-2 ${Number(h.quantity_change)<0?'text-olives-red':'text-olives-green'}">${Number(h.quantity_change)>0?'+':''}${h.quantity_change}</td><td class="p-2">${h.quantity_after}</td><td class="p-2">${h.staff_name || '-'}</td><td class="p-2">${relTime(h.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No history.</td></tr>';
       qs('#olives-stock-full-history')?.addEventListener('click',()=>alert('Full history loaded in this section (up to 500 rows via API).'));
     } catch(e){ tbody.innerHTML = `<tr><td colspan="6" class="p-2 text-olives-red">${e.message}</td></tr>`; }
   };
@@ -1697,7 +1814,7 @@ return <<<'JS'
     const wrap = qs('#olives-sales-products');
     if (!wrap) return;
     const query = (qs('#olives-sales-search')?.value || '').toLowerCase().trim();
-    const list = state.products.filter(p=> p.name.toLowerCase().includes(query));
+    const list = state.products.filter(p=> productInForm(p,'sales') && p.name.toLowerCase().includes(query));
     wrap.innerHTML = list.map(p=>{
       const out = Number(p.quantity||0) <= 0;
       return `<button class="text-left p-3 rounded-[20px] border transition-all duration-200 ${out?'opacity-50 cursor-not-allowed':'hover:border-olives-green'}" ${out?'disabled':''} data-add="${p.id}"><div class="font-semibold">${p.name}</div><div class="text-sm text-slate-500">Qty: ${p.quantity}</div><div class="text-sm text-olives-green font-semibold">${fmt(p.selling_price)}</div></button>`;
@@ -1925,7 +2042,7 @@ return <<<'JS'
       const products = p.products || [];
       const sel = qs('#olives-import-product');
       if (sel) {
-        sel.innerHTML = products.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+        sel.innerHTML = products.filter(x=>productInForm(x,'imports')).map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
       }
     } catch(e) {}
 
@@ -1934,7 +2051,7 @@ return <<<'JS'
       if (!body) return;
       try {
         const data = await ajax('imports_list');
-        body.innerHTML = (data.imports || []).map(r=>`<tr class="border-b"><td class="p-2">${r.created_at}</td><td class="p-2">${r.product_name}</td><td class="p-2">${r.quantity}</td><td class="p-2">${fmt(r.unit_cost)}</td><td class="p-2">${r.staff_id || '-'}</td><td class="p-2">${r.note || '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No imports for today.</td></tr>';
+        body.innerHTML = (data.imports || []).map(r=>`<tr class="border-b"><td class="p-2">${r.created_at}</td><td class="p-2">${r.product_name}</td><td class="p-2">${r.quantity}</td><td class="p-2">${fmt(r.unit_cost)}</td><td class="p-2">${r.staff_name || '-'}</td><td class="p-2">${r.note || '-'}</td></tr>`).join('') || '<tr><td colspan="6" class="p-2 text-slate-500">No imports for today.</td></tr>';
       } catch(e){
         body.innerHTML = `<tr><td colspan="6" class="p-2 text-olives-red">${e.message}</td></tr>`;
       }
