@@ -69,6 +69,7 @@ add_action( 'init', array( $this, 'register_shortcodes' ) );
 add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_front_assets' ) );
 add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 add_action( 'admin_menu', array( $this, 'register_admin_menu' ) );
+add_filter( 'the_content', array( $this, 'render_plugin_page_content' ), 20 );
 
 add_action( 'wp_ajax_olives_products_list', array( $this, 'ajax_products_list' ) );
 add_action( 'wp_ajax_olives_products_save', array( $this, 'ajax_products_save' ) );
@@ -288,7 +289,25 @@ if ( ! $post instanceof WP_Post ) {
 return false;
 }
 $content = (string) $post->post_content;
-return ( false !== strpos( $content, '[olives_' ) );
+if ( false !== strpos( $content, '[olives_' ) ) {
+return true;
+}
+return null !== $this->page_key_by_id( $post->ID );
+}
+
+public function render_plugin_page_content( $content ) {
+if ( is_admin() || ! is_singular( 'page' ) || ! in_the_loop() || ! is_main_query() ) {
+return $content;
+}
+global $post;
+if ( ! $post instanceof WP_Post ) {
+return $content;
+}
+$page_key = $this->page_key_by_id( $post->ID );
+if ( null === $page_key ) {
+return $content;
+}
+return do_shortcode( $this->pages[ $page_key ]['shortcode'] );
 }
 
 public function enqueue_front_assets() {
@@ -342,7 +361,9 @@ private function inline_css() {
 return '
 .olives-app{font-family:Inter,system-ui,sans-serif;color:#0f172a;background:#f8fafc;padding:16px;border-radius:20px}
 .olives-card{border-radius:20px;background:#fff;box-shadow:0 4px 24px rgba(15,23,42,.06);border:1px solid #e2e8f0}
-.olives-header{border-radius:20px;background:#fff;box-shadow:0 4px 24px rgba(15,23,42,.06);border:1px solid #e2e8f0}
+.olives-header{position:sticky;top:16px;z-index:30;border-radius:20px;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);box-shadow:0 8px 28px rgba(15,23,42,.10);border:1px solid #e2e8f0}
+.olives-app a,.olives-app a:hover,.olives-app a:focus{text-decoration:none!important}
+.olives-app button,.olives-app input[type="button"],.olives-app input[type="submit"],.olives-app .button{border-radius:20px}
 .olives-glass{backdrop-filter: blur(10px);background:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.4)}
 .olives-table-wrap{overflow:auto}
 .olives-skeleton{position:relative;overflow:hidden;background:#e2e8f0}
@@ -367,6 +388,19 @@ $links[] = array(
 );
 }
 return $links;
+}
+
+private function page_key_by_id( $post_id ) {
+$pages = get_option( 'olives_pages', array() );
+if ( ! is_array( $pages ) ) {
+return null;
+}
+foreach ( $pages as $key => $id ) {
+if ( (int) $id === (int) $post_id && isset( $this->pages[ $key ] ) ) {
+return $key;
+}
+}
+return null;
 }
 
 private function render_header( $active = 'home' ) {
